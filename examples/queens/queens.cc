@@ -18,7 +18,7 @@ void PositionConstraints(BDD& queen, BDD **board, int i, int j, int N, Cudd *mgr
   {
     if (l != j)
     {
-      a &= (!board[i][j] | !board[i][l]);
+      a &= ((!board[i][j]) | (!board[i][l]));
     }
   }
 
@@ -27,7 +27,7 @@ void PositionConstraints(BDD& queen, BDD **board, int i, int j, int N, Cudd *mgr
   {
     if (k != i)
     {
-      b &= (!board[i][j] | !board[k][j]);
+      b &= ((!board[i][j]) | (!board[k][j]));
     }
   }
 
@@ -37,7 +37,7 @@ void PositionConstraints(BDD& queen, BDD **board, int i, int j, int N, Cudd *mgr
     int ll = k-i+j;
     if ((ll >= 0) && (ll < N) && (k != i))
     {
-      c &= (!board[i][j] | !board[k][ll]);
+      c &= ((!board[i][j]) | (!board[k][ll]));
     }
   }
 
@@ -47,7 +47,7 @@ void PositionConstraints(BDD& queen, BDD **board, int i, int j, int N, Cudd *mgr
     int ll = i+j-k;
     if ((ll >= 0) && (ll < N) && (k != i))
     {
-      d &= (!board[i][j] | !board[k][ll]);
+      d &= ((!board[i][j]) | (!board[k][ll]));
     }
   }
 
@@ -57,7 +57,6 @@ void PositionConstraints(BDD& queen, BDD **board, int i, int j, int N, Cudd *mgr
 int main(int ac, char **av)
 {
    int N;            /* Size of the chess board */
-   BDD **X;          /* BDD variable array */
    int b,c;
    
    if (ac != 4)
