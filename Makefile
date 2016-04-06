@@ -165,7 +165,7 @@ XCFLAGS	= -mtune=native -malign-double -DHAVE_IEEE_754 -DBSD
 
 # Define the level of self-checking and verbosity of the CUDD package.
 #DDDEBUG = -DDD_DEBUG -DDD_VERBOSE -DDD_STATS -DDD_CACHE_PROFILE -DDD_UNIQUE_PROFILE -DDD_COUNT
-DDDEBUG	=
+DDDEBUG	= -DDD_VERBOSE
 
 # Define the level of self-checking and verbosity of the MTR package.
 #MTRDEBUG = -DMTR_DEBUG

@@ -1,5 +1,6 @@
 #include "cuddObj.hh"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
 #include <cassert>
@@ -113,6 +114,11 @@ int main(int ac, char **av)
     }
 
     cout << queen.CountMinterm(N*N)<< endl;
+
+    DdManager* queenMgr = queen.manager();
+    FILE *fp = fopen("stats.txt", "w");
+    Cudd_PrintInfo(queenMgr, fp);
+    fclose(fp);
 
     for (int i = 0; i < N; i++)
       delete[] board[i];
