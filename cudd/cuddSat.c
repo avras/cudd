@@ -122,7 +122,9 @@ extern "C" {
 
 static enum st_retval freePathPair (char *key, char *value, char *arg);
 static cuddPathPair getShortest (DdNode *root, int *cost, int *support, st_table *visited);
+static cuddPathPair getHeaviestMintermWeight(DdManager *manager, DdNode *root, st_table *visited);
 static DdNode * getPath (DdManager *manager, st_table *visited, DdNode *f, int *weight, int cost);
+static DdNode * getHeaviestMinterm (DdManager *manager, st_table *visited, DdNode *f, int weight);
 static cuddPathPair getLargest (DdNode *root, st_table *visited);
 static DdNode * getCube (DdManager *manager, st_table *visited, DdNode *f, int cost);
 static DdNode * ddBddMaximallyExpand(DdManager *dd, DdNode *lb, DdNode *ub, DdNode *f);
@@ -265,6 +267,79 @@ Cudd_ShortestPath(
     return(sol);
 
 } /* end of Cudd_ShortestPath */
+
+/**Function********************************************************************
+
+  Synopsis    [Finds a minterm in a DD which has the maximum number of positive
+              literals including don't care variables.
+              This function only considers don't care variables which are
+              lower in the ordering than the variable of the root node of the DD]
+
+  Description [Finds a minterm in a DD which has the maximum number of positive
+              literals including don't care variables.
+  f is the DD we want to find the heaviest minterm in.
+  Returns the heaviest minterm as a BDD.]
+
+  SideEffects [weight contains the weight of the minterm.]
+
+  SeeAlso     [Cudd_ShortestPath Cudd_ShortestLength Cudd_LargestCube]
+
+******************************************************************************/
+DdNode *
+Cudd_HeaviestMinterm(
+  DdManager * manager,
+  DdNode * f,
+  int * weight)
+{
+    DdNode      *F;
+    st_table    *visited;
+    DdNode      *sol;
+    cuddPathPair *rootPair;
+    int         complement, cost;
+    int         i;
+
+    one = DD_ONE(manager);
+    zero = DD_ZERO(manager);
+
+    if (f == Cudd_Not(one) || f == zero) {
+      *weight = DD_BIGGY;
+      return(Cudd_Not(one));
+    }
+    /* From this point on, a path exists. */
+
+    do {
+        manager->reordered = 0;
+
+        /* Initialize visited table. */
+        visited = st_init_table(st_ptrcmp, st_ptrhash);
+
+        /* Now get the weights of the heaviest path(s) from f to 1. */
+        (void) getHeaviestMintermWeight(manager, f, visited);
+
+        complement = Cudd_IsComplement(f);
+
+        F = Cudd_Regular(f);
+
+        if (!st_lookup(visited, F, &rootPair)) return(NULL);
+
+        if (complement) {
+          cost = rootPair->neg;
+        } else {
+          cost = rootPair->pos;
+        }
+
+        /* Recover an actual heaviest minterm. */
+        sol = getHeaviestMinterm(manager,visited,f,cost);
+
+        st_foreach(visited, freePathPair, NULL);
+        st_free_table(visited);
+
+    } while (manager->reordered == 1);
+
+    *weight = -cost; // The costs are -1 for each positive literal
+    return(sol);
+
+} /* end of Cudd_HeaviestMinterm */
 
 
 /**Function********************************************************************
@@ -1166,6 +1241,125 @@ getShortest(
 
 } /* end of getShortest */
 
+/**Function********************************************************************
+
+  Synopsis    [Finds the weight of the minterm in a DD which has the maximum
+               number of positive literals including don't care variables.
+              This function only considers don't care variables which are
+              lower in the ordering than the variable of the root node of the DD]
+
+  Description [Finds the weight of the heaviest minterm(s) in a DD including
+  don't care variables.
+  Uses a local symbol table to store the weights for each
+  node. Only the weights for the regular nodes are entered in the table,
+  because those for the complement nodes are simply obtained by swapping
+  the two weights.
+  Returns a pair of weights: the weight of the heaviest path to 1;
+  and the weight of the heaviest path to 0. This is done so as to take
+  complement arcs into account.]
+
+  SideEffects  [none]
+
+  SeeAlso     [getShortest]
+
+******************************************************************************/
+static cuddPathPair
+getHeaviestMintermWeight(
+  DdManager * manager,
+  DdNode * root,
+  st_table * visited)
+{
+    cuddPathPair *my_pair, res_pair, pair_T, pair_E;
+    DdNode      *my_root, *T, *E, *reg_T, *reg_E;
+    int         Tweight, Eweight;
+
+    my_root = Cudd_Regular(root);
+
+    if (st_lookup(visited, my_root, &my_pair)) {
+        if (Cudd_IsComplement(root)) {
+            res_pair.pos = my_pair->neg;
+            res_pair.neg = my_pair->pos;
+        } else {
+            res_pair.pos = my_pair->pos;
+            res_pair.neg = my_pair->neg;
+        }
+        return(res_pair);
+    }
+
+    /* In the case of a BDD the following test is equivalent to
+    ** testing whether the BDD is the constant 1. This formulation,
+    ** however, works for ADDs as well, by assuming the usual
+    ** dichotomy of 0 and != 0.
+    */
+    if (cuddIsConstant(my_root)) {
+        if (my_root != zero) {
+            res_pair.pos = 0;
+            res_pair.neg = DD_BIGGY;
+        } else {
+            res_pair.pos = DD_BIGGY;
+            res_pair.neg = 0;
+        }
+    } else {
+        T = cuddT(my_root);
+        E = cuddE(my_root);
+
+        reg_T = Cudd_Regular(T);
+        reg_E = Cudd_Regular(E);
+
+        pair_T = getHeaviestMintermWeight(manager, T, visited);
+        pair_E = getHeaviestMintermWeight(manager, E, visited);
+
+        if (cuddIsConstant(reg_T))
+        {
+          Tweight = -(manager->size - my_root->index);
+        }
+        else
+        {
+          Tweight = -(reg_T->index - my_root->index);
+        }
+
+        if (cuddIsConstant(reg_E))
+        {
+          Eweight = -(manager->size - my_root->index - 1);
+        }
+        else
+        {
+          Eweight = -(reg_E->index - my_root->index - 1);
+        }
+
+        res_pair.pos = ddMin(pair_T.pos + Tweight,
+                             pair_E.pos + Eweight
+                       );
+        res_pair.neg = ddMin(pair_T.neg + Tweight,
+                             pair_E.neg + Eweight
+                       );
+
+    }
+
+    my_pair = ALLOC(cuddPathPair, 1);
+    if (my_pair == NULL) {
+        if (Cudd_IsComplement(root)) {
+            int tmp = res_pair.pos;
+            res_pair.pos = res_pair.neg;
+            res_pair.neg = tmp;
+        }
+        return(res_pair);
+    }
+    my_pair->pos = res_pair.pos;
+    my_pair->neg = res_pair.neg;
+
+    st_insert(visited, (char *)my_root, (char *)my_pair);
+    if (Cudd_IsComplement(root)) {
+        res_pair.pos = my_pair->neg;
+        res_pair.neg = my_pair->pos;
+    } else {
+        res_pair.pos = my_pair->pos;
+        res_pair.neg = my_pair->neg;
+    }
+    return(res_pair);
+
+} /* end of getHeaviestMintermWeight */
+
 
 /**Function********************************************************************
 
@@ -1256,6 +1450,134 @@ getPath(
     return(sol);
 
 } /* end of getPath */
+
+/**Function********************************************************************
+
+  Synopsis    [Build a BDD for the heaviest minterm of f including don't care variables.]
+
+  Description [Build a BDD for the heaviest minterm of f including don't care variables.
+  Given the heaviest weight from the root, and the heaviest weights
+  for each node (in visited), apply triangulation at each node.
+  Of the two children of each node on a heaviest path, at least one is
+  on a heaviest path. In case of ties the procedure chooses the THEN
+  children.
+  Returns a pointer to the cube BDD representing the path if
+  successful; NULL otherwise.]
+
+  SideEffects [None]
+
+  SeeAlso     [getHeaviestMintermWeight]
+
+******************************************************************************/
+static DdNode *
+getHeaviestMinterm(
+  DdManager * manager,
+  st_table * visited,
+  DdNode * f,
+  int  weight)
+{
+    DdNode      *sol, *tmp;
+    DdNode      *my_dd, *T, *E, *reg_T, *reg_E;
+    cuddPathPair *T_pair, *E_pair;
+    int         Tweight, Eweight;
+    int         complement;
+    int         var_index;
+
+    my_dd = Cudd_Regular(f);
+    complement = Cudd_IsComplement(f);
+
+    sol = one;
+    cuddRef(sol);
+
+    while (!cuddIsConstant(my_dd)) {
+        T = cuddT(my_dd);
+        E = cuddE(my_dd);
+
+        reg_T = Cudd_Regular(T);
+        reg_E = Cudd_Regular(E);
+
+        if (cuddIsConstant(reg_T))
+        {
+          Tweight = weight + (manager->size - my_dd->index);
+        }
+        else
+        {
+          Tweight = weight + (reg_T->index - my_dd->index);
+        }
+
+        if (cuddIsConstant(reg_E))
+        {
+          Eweight = weight + (manager->size - my_dd->index - 1);
+        }
+        else
+        {
+          Eweight = weight + (reg_E->index - my_dd->index - 1);
+        }
+
+        if (complement) {T = Cudd_Not(T); E = Cudd_Not(E);}
+
+        st_lookup(visited, Cudd_Regular(T), &T_pair);
+        if ((Cudd_IsComplement(T) && T_pair->neg == Tweight) ||
+        (!Cudd_IsComplement(T) && T_pair->pos == Tweight)) {
+            for (var_index = my_dd->index; var_index < ddMin(reg_T->index, manager->size); var_index++)
+            {
+              tmp = cuddBddAndRecur(manager,manager->vars[var_index],sol);
+              if (tmp == NULL) {
+                  Cudd_RecursiveDeref(manager,sol);
+                  return(NULL);
+              }
+              cuddRef(tmp);
+              Cudd_RecursiveDeref(manager,sol);
+              sol = tmp;
+            }
+
+            complement =  Cudd_IsComplement(T);
+            my_dd = Cudd_Regular(T);
+            weight = Tweight;
+            continue;
+        }
+        st_lookup(visited, Cudd_Regular(E), &E_pair);
+        if ((Cudd_IsComplement(E) && E_pair->neg == Eweight) ||
+        (!Cudd_IsComplement(E) && E_pair->pos == Eweight)) {
+            for (var_index = my_dd->index; var_index < ddMin(reg_E->index, manager->size); var_index++)
+            {
+              if (var_index == my_dd->index)
+              {
+                tmp = cuddBddAndRecur(manager,Cudd_Not(manager->vars[var_index]),sol);
+              }
+              else
+              {
+                tmp = cuddBddAndRecur(manager,manager->vars[var_index],sol);
+              }
+              if (tmp == NULL) {
+                  Cudd_RecursiveDeref(manager,sol);
+                  return(NULL);
+              }
+              cuddRef(tmp);
+              Cudd_RecursiveDeref(manager,sol);
+              sol = tmp;
+            }
+            if (tmp == NULL) {
+                Cudd_RecursiveDeref(manager,sol);
+                return(NULL);
+            }
+            cuddRef(tmp);
+            Cudd_RecursiveDeref(manager,sol);
+            sol = tmp;
+            complement = Cudd_IsComplement(E);
+            my_dd = Cudd_Regular(E);
+            weight = Eweight;
+            continue;
+        }
+        (void) fprintf(manager->err,"We shouldn't be here!!\n");
+        manager->errorCode = CUDD_INTERNAL_ERROR;
+        return(NULL);
+    }
+
+    cuddDeref(sol);
+    return(sol);
+
+} /* end of getHeaviestMinterm */
 
 
 /**Function********************************************************************

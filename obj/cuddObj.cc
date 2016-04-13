@@ -4588,6 +4588,18 @@ ABDD::ShortestPath(
 
 
 BDD
+ABDD::HeaviestMinterm(
+  int * weight) const
+{
+    DdManager *mgr = p->manager;
+    DdNode *result = Cudd_HeaviestMinterm(mgr, node, weight);
+    checkReturnValue(result);
+    return BDD(p, result);
+
+} // ABDD::HeaviestMinterm
+
+
+BDD
 ABDD::LargestCube(
   int * length) const
 {

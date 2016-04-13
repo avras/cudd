@@ -178,6 +178,7 @@ public:
     BDD FindEssential() const;
     void PrintTwoLiteralClauses(char ** names, FILE * fp = stdout) const;
     BDD ShortestPath(int * weight, int * support, int * length) const;
+    BDD HeaviestMinterm(int * weight) const;
     BDD LargestCube(int * length = 0) const;
     int ShortestLength(int * weight) const;
     bool EquivDC(const ABDD& G, const ABDD& D) const;

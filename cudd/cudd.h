@@ -944,6 +944,7 @@ extern int Cudd_ReduceHeap (DdManager *table, Cudd_ReorderingType heuristic, int
 extern int Cudd_ShuffleHeap (DdManager *table, int *permutation);
 extern DdNode * Cudd_Eval (DdManager *dd, DdNode *f, int *inputs);
 extern DdNode * Cudd_ShortestPath (DdManager *manager, DdNode *f, int *weight, int *support, int *length);
+extern DdNode * Cudd_HeaviestMinterm (DdManager *manager, DdNode *f, int *weight);
 extern DdNode * Cudd_LargestCube (DdManager *manager, DdNode *f, int *length);
 extern int Cudd_ShortestLength (DdManager *manager, DdNode *f, int *weight);
 extern DdNode * Cudd_Decreasing (DdManager *dd, DdNode *f, int i);
